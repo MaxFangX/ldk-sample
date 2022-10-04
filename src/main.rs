@@ -771,5 +771,9 @@ async fn start_ldk() {
 
 #[tokio::main]
 pub async fn main() {
-	start_ldk().await;
+    tokio::spawn(async move {
+        start_ldk().await;
+    })
+        .await
+        .expect("LDK panicked")
 }
