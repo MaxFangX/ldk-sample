@@ -150,16 +150,23 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 	println!("LDK startup successful. To view available commands: \"help\".");
 	println!("LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs");
 	println!("Local Node ID is {}.", channel_manager.get_our_node_id());
-	let stdin = io::stdin();
-	let mut line_reader = stdin.lock().lines();
 	loop {
 		print!("> ");
 		io::stdout().flush().unwrap(); // Without flushing, the `>` doesn't print
-		let line = match line_reader.next() {
+		// Dropping line_reader within this scope allows the node to be `Send`,
+		// but loses anything buffered after the first '\n' (FIXME). This should
+		// be fine since there are no multi-line commands and this is just the
+		// REPL, but maybe it will need to be fixed eventually.
+		let maybe_line = {
+			let mut line_reader = io::stdin().lock().lines();
+			line_reader.next()
+		};
+		let line = match maybe_line {
 			Some(l) => l.unwrap(),
 			None => break,
 		};
 		let mut words = line.split_whitespace();
+
 		if let Some(word) = words.next() {
 			match word {
 				"help" => help(),
