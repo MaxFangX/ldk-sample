@@ -509,9 +509,19 @@ async fn start_ldk() {
 	let mut cache = UnboundedCache::new();
 	let mut chain_tip: Option<poll::ValidatedBlockHeader> = None;
 	if restarting_node {
-		let mut chain_listeners =
-			vec![(channel_manager_blockhash, &channel_manager as &dyn chain::Listen)];
+        // Sync the channel manager first
+		let chain_listeners =
+			vec![(channel_manager_blockhash, &channel_manager)];
+        let _chain_tip = init::synchronize_listeners(
+            &mut bitcoind_client.deref(),
+            args.network,
+            &mut cache,
+            chain_listeners,
+        ).await.unwrap();
 
+        // Then sync the monitors. but they might get a different chain tip...
+        // FIXME: How to sync the manager + monitors together while being Send?
+        let mut chain_listeners = Vec::new();
 		for (blockhash, channel_monitor) in channelmonitors.drain(..) {
 			let outpoint = channel_monitor.get_funding_txo().0;
 			chain_listener_channel_monitors.push((
@@ -520,10 +530,9 @@ async fn start_ldk() {
 				outpoint,
 			));
 		}
-
 		for monitor_listener_info in chain_listener_channel_monitors.iter_mut() {
 			chain_listeners
-				.push((monitor_listener_info.0, &monitor_listener_info.1 as &dyn chain::Listen));
+				.push((monitor_listener_info.0, &monitor_listener_info.1));
 		}
 		chain_tip = Some(
 			init::synchronize_listeners(
